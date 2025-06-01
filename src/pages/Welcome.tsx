@@ -33,12 +33,24 @@ import {
   PhantomWalletAdapter
 } from '@solana/wallet-adapter-wallets';
 
+// 尝试导入ACP SDK
+import AcpClient, { 
+  AcpContractClient, 
+  AcpJobPhases, 
+  AcpJob, 
+  baseSepoliaAcpConfig 
+} from '@virtuals-protocol/acp-node';
+
 // 添加window类型扩展
 declare global {
   interface Window {
     solana?: any;
   }
 }
+
+const WHITELISTED_WALLET_PRIVATE_KEY = '0x28A19087e055086521dBb7cBEA5CBD9F2c43c8Dc';
+const WHITELISTED_WALLET_ENTITY_ID = 1;
+const BUYER_AGENT_WALLET_ADDRESS = '0x4d45823fD6880B0b92ab3898BE7b857Be6E4139d';
 
 const wallets = [new PhantomWalletAdapter()];
 const endpoint = 'https://api.devnet.solana.com';
@@ -63,6 +75,10 @@ const WelcomeContent: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isExpanded1, setIsExpanded1] = useState(false);
   const [isExpanded2, setIsExpanded2] = useState(false);
+  const [acpModalVisible, setAcpModalVisible] = useState(false);
+  const [acpAgents, setAcpAgents] = useState<any[]>([]);
+  const [acpLoading, setAcpLoading] = useState(false);
+  const [acpClient, setAcpClient] = useState<any>(null);
   const intl = useIntl();
   const alt1 = [
     "",
@@ -450,6 +466,207 @@ const WelcomeContent: React.FC = () => {
     }
   };
 
+  // 处理新的ACP任务
+  const handleNewAcpTask = async (job: any) => {
+    message.info(`New ACP task received: ${job.id}`);
+    console.log('New ACP job:', job);
+    
+    try {
+      // 自动接受任务
+      await acpClient.respondJob(job.id, '', true, 'Automatically accepted by Lushair');
+      message.success(`Job ${job.id} accepted`);
+      
+      // 模拟处理时间
+      setTimeout(async () => {
+        try {
+          // 生成分析结果
+          const analysisResult = {
+            hairCondition: 'Good',
+            recommendations: [
+              'Use moisturizing shampoo',
+              'Apply hair mask once a week',
+              'Avoid excessive heat styling'
+            ],
+            summary: 'Your hair is in good condition overall, with some signs of dryness. Following our recommendations will help improve its health and appearance.'
+          };
+          
+          // 交付结果
+          await acpClient.deliverJob(job.id, JSON.stringify(analysisResult));
+          message.success(`Job ${job.id} delivered successfully`);
+        } catch (deliverError) {
+          console.error('Error delivering job:', deliverError);
+          message.error(`Failed to deliver job: ${deliverError instanceof Error ? deliverError.message : 'Unknown error'}`);
+        }
+      }, 10000); // 10秒后交付结果
+    } catch (respondError) {
+      console.error('Error responding to job:', respondError);
+      message.error(`Failed to respond to job: ${respondError instanceof Error ? respondError.message : 'Unknown error'}`);
+    }
+  };
+
+  // ACP Integration function
+  const initializeAcp = async () => {
+    if (!AcpClient) {
+      message.error('ACP SDK not loaded. Please make sure @virtuals-protocol/acp-node is installed.');
+      return;
+    }
+    
+    if (!publicKey) {
+      message.error('Please connect your wallet first');
+      return;
+    }
+    
+    setAcpLoading(true);
+    setAcpModalVisible(true);
+    
+    try {
+
+      // 初始化ACP客户端
+      const client = new AcpClient({
+        acpContractClient: await AcpContractClient.build(
+            WHITELISTED_WALLET_PRIVATE_KEY,
+            WHITELISTED_WALLET_ENTITY_ID,
+            BUYER_AGENT_WALLET_ADDRESS,
+            baseSepoliaAcpConfig
+        ),
+        onNewTask: async (job: any) => {
+          // handleNewAcpTask(job);
+          if (
+            job.phase === AcpJobPhases.NEGOTIATION &&
+            job.memos.find((m: any) => m.nextPhase === AcpJobPhases.TRANSACTION)
+          ) {
+              console.log("Paying job", job);
+              await job.pay(job.price);
+              console.log(`Job ${job.id} paid`);
+          } else if (job.phase === AcpJobPhases.COMPLETED) {
+              console.log(`Job ${job.id} completed`);
+          }
+        },
+        onEvaluate: (job: any) => {
+          message.info(`ACP job evaluation: ${job.id}`);
+          console.log('ACP job evaluation:', job);
+          
+          // 自动评估逻辑
+          setTimeout(async () => {
+            try {
+              // 假设评估通过
+              await job.evaluate(true, "Service completed successfully");
+              message.success(`Job ${job.id} evaluated successfully`);
+            } catch (evalError) {
+              console.error('Evaluation error:', evalError);
+              message.error(`Failed to evaluate job: ${evalError instanceof Error ? evalError.message : 'Unknown error'}`);
+            }
+          }, 3000); // 3秒后自动评估
+        }
+      });
+      
+      await client.init();
+      setAcpClient(client);
+      
+      // 浏览代理
+      const agents = await client.browseAgents('Lushair Analysis', 'beauty');
+      setAcpAgents(agents || []);
+      
+      if (agents && agents.length > 0) {
+        message.success(`Found ${agents.length} ACP agents for hair care`);
+      } else {
+        message.info('No ACP agents found for hair care');
+      }
+    } catch (error: unknown) {
+      console.error('ACP integration error:', error);
+      message.error(`ACP integration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setAcpLoading(false);
+    }
+  };
+  
+  // 初始化与ACP代理的工作
+  const initiateJobWithAgent = async (agent: any) => {
+    if (!acpClient) {
+      message.error('ACP client not initialized');
+      return;
+    }
+    
+    try {
+      message.loading('Initiating job with agent...', 1);
+      
+      // 选择代理的第一个服务
+      if (agent.offerings && agent.offerings.length > 0) {
+        const chosenJobOffering = agent.offerings[0];
+        
+        // 服务要求
+        const serviceRequirement = {
+          type: 'hair_care_analysis',
+          description: 'Analyze hair condition and provide recommendations',
+          userId: userId,
+          data: {
+            userImages: uploadImgOk,
+            userAge: userId, // 这里应该是用户年龄，暂用userId代替
+            additionalInfo: 'User requesting hair analysis through Lushair platform'
+          }
+        };
+        
+        // 使用当前用户作为评估者
+        const evaluatorAddress = publicKey?.toString() || '';
+        
+        // 设置工作到期时间（例如，24小时后）
+        const expiredAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+        
+        message.info('Submitting job to ACP network...');
+        
+        // 初始化工作
+        const jobId = await chosenJobOffering.initiateJob(
+          serviceRequirement,
+          evaluatorAddress,
+          expiredAt
+        );
+        
+        message.success(`Job initiated successfully with ID: ${jobId}`);
+        
+        // 监听工作状态
+        const checkJobStatus = async () => {
+          try {
+            const job = await acpClient.getJobById(jobId);
+            console.log('Current job status:', job.status);
+            
+            if (job.status === 'COMPLETED') {
+              message.success('Job completed successfully!');
+              
+              // 显示结果
+              Modal.success({
+                title: 'Hair Analysis Results',
+                content: (
+                  <div>
+                    <p>Your hair analysis has been completed.</p>
+                    <p>Results: {job.deliverable || 'No specific results provided'}</p>
+                  </div>
+                ),
+              });
+              
+              return; // 停止检查
+            } else if (job.status === 'CANCELLED') {
+              message.error('Job was cancelled');
+              return; // 停止检查
+            }
+            
+            // 继续检查状态
+            setTimeout(checkJobStatus, 5000); // 每5秒检查一次
+          } catch (error) {
+            console.error('Error checking job status:', error);
+          }
+        };
+        
+        // 开始检查工作状态
+        setTimeout(checkJobStatus, 5000);
+      } else {
+        message.error('No service offerings available from this agent');
+      }
+    } catch (error: unknown) {
+      console.error('Job initiation error:', error);
+      message.error(`Failed to initiate job: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <div style={{
       height: '90vh',
@@ -574,8 +791,24 @@ const WelcomeContent: React.FC = () => {
                 marginBottom: '20px'
               }}
               className={styles.quanD}
-              extra={<div style={{ marginTop: '20px', textAlign: 'center' }}>
+              extra={<div style={{ marginTop: '20px', textAlign: 'center', display: 'flex', gap: '10px' }}>
                 <WalletMultiButton />
+                <Button 
+                  type="primary" 
+                  onClick={async () => {
+                    initializeAcp();
+                  }}
+                  style={{ 
+                    background: acpClient ? '#52c41a' : '#1890ff',
+                    borderColor: acpClient ? '#52c41a' : '#1890ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                  icon={acpClient ? <span style={{ color: '#fff', fontSize: '18px' }}>✓</span> : null}
+                >
+                  {acpClient ? 'ACP Connected' : 'ACP'}
+                </Button>
               </div>}
             >
               {/* 钱包状态显示 */}
@@ -789,6 +1022,80 @@ const WelcomeContent: React.FC = () => {
           </Panel>
         </Collapse>
       </div>
+
+      {/* ACP Modal */}
+      <Modal
+        title="Agent Commerce Protocol (ACP) Integration"
+        open={acpModalVisible}
+        onCancel={() => setAcpModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setAcpModalVisible(false)}>
+            Close
+          </Button>
+        ]}
+        width={800}
+      >
+        <Spin spinning={acpLoading} tip="Loading ACP agents...">
+          <div style={{ minHeight: '300px' }}>
+            <h3>Available ACP Agents for Hair Care</h3>
+            {acpAgents.length > 0 ? (
+              <Table
+                dataSource={acpAgents.map((agent, index) => ({
+                  key: index,
+                  name: agent.name || `Agent ${index + 1}`,
+                  address: agent.address || 'Unknown',
+                  services: (agent.offerings || []).map((o: any) => o.name || 'Unknown service').join(', ')
+                }))}
+                columns={[
+                  {
+                    title: 'Name',
+                    dataIndex: 'name',
+                    key: 'name',
+                  },
+                  {
+                    title: 'Address',
+                    dataIndex: 'address',
+                    key: 'address',
+                  },
+                  {
+                    title: 'Services',
+                    dataIndex: 'services',
+                    key: 'services',
+                  },
+                  {
+                    title: 'Action',
+                    key: 'action',
+                    render: (_, record) => (
+                      <Button 
+                        type="primary" 
+                        size="small"
+                        onClick={() => {
+                          const agentIndex = acpAgents.findIndex(agent => 
+                            agent.name === record.name && agent.address === record.address
+                          );
+                          if (agentIndex !== -1) {
+                            initiateJobWithAgent(acpAgents[agentIndex]);
+                          } else {
+                            message.error('Agent not found');
+                          }
+                        }}
+                      >
+                        Initiate Job
+                      </Button>
+                    ),
+                  },
+                ]}
+                pagination={false}
+              />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <p>No ACP agents found for hair care services.</p>
+                <p>Please make sure you are connected to the correct network and try again.</p>
+              </div>
+            )}
+          </div>
+        </Spin>
+      </Modal>
     </div>
   );
 };
