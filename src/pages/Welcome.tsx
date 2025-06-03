@@ -366,51 +366,6 @@ const WelcomeContent: React.FC = () => {
     message.error('Transaction failed：' + (err instanceof Error ? err.message : String(err)));
   }
 };
-    
-    // console.log(intl.formatMessage({ id: 'transaction_request' }), {
-    //   publicKey: publicKey?.toString(),
-    //   connected: wallet ? (wallet as any).connected : false
-    // });
-    
-    // if (!publicKey) {
-    //   message.error(intl.formatMessage({ id: 'connect_wallet_first' }));
-      
-    //   // 尝试自动连接钱包
-    //   connectWallet();
-    //   return;
-    // }
-
-    // try {
-    //   // 使用类型断言来解决TypeScript错误
-    //   const provider = new AnchorProvider(
-    //     connection, 
-    //     wallet as any, 
-    //     { preflightCommitment: 'processed' }
-    //   );
-
-    //   const program = new Program(idl as any, programID, provider);
-
-    //   const [rewardAccountPDA] = await PublicKey.findProgramAddress(
-    //     [Buffer.from(rewardAccountSeed), publicKey.toBuffer()],
-    //     programID
-    //   );
-
-    //   const currentDay = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-
-    //   const tx = await program.methods
-    //     .rewardAction({ login: {} }, new BN(currentDay))
-    //     .accounts({
-    //       rewardAccount: rewardAccountPDA,
-    //       user: publicKey,
-    //     })
-    //     .rpc();
-
-    //   console.log('Transaction successful:', tx);
-    //   message.success('Transaction successful');
-    // } catch (err) {
-    //   console.error('Transaction failed:', err);
-    //   message.error('Transaction failed：' + (err instanceof Error ? err.message : String(err)));
-    // }
   
   // 设置表格列
   const columns = [
@@ -643,7 +598,6 @@ const WelcomeContent: React.FC = () => {
       // 浏览代理
       console.log('Browsing ACP agents...');
       const agents = await client.browseAgents('Lushair Analysis', 'wellness');
-      // console.log('ACP Agents data:', JSON.stringify(agents, null, 2)); // 添加日志输出代理数据
       
       // 检查代理数据结构
       if (agents && agents.length > 0) {
@@ -702,71 +656,6 @@ const WelcomeContent: React.FC = () => {
         console.log(`Job ${jobId} initiated`);
         message.success('Job initiated');
         setAcpModalVisible(false)
-        
-      //   // 服务要求
-      //   const serviceRequirement = {
-      //     type: 'hair_care_analysis',
-      //     description: 'Analyze hair condition and provide recommendations',
-      //     userId: userId,
-      //     data: {
-      //       userImages: uploadImgOk,
-      //       userAge: userId, // 这里应该是用户年龄，暂用userId代替
-      //       additionalInfo: 'User requesting hair analysis through Lushair platform'
-      //     }
-      //   };
-        
-      //   // 使用当前用户作为评估者
-      //   const evaluatorAddress = publicKey?.toString() || '';
-        
-      //   // 设置工作到期时间（例如，24小时后）
-      //   const expiredAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
-        
-      //   message.info('Submitting job to ACP network...');
-        
-      //   // 初始化工作
-      //   const jobId = await chosenJobOffering.initiateJob(
-      //     serviceRequirement,
-      //     evaluatorAddress,
-      //     expiredAt
-      //   );
-        
-      //   message.success(`Job initiated successfully with ID: ${jobId}`);
-        
-      //   // 监听工作状态
-      //   const checkJobStatus = async () => {
-      //     try {
-      //       const job = await acpClient.getJobById(jobId);
-      //       console.log('Current job status:', job.status);
-            
-      //       if (job.status === 'COMPLETED') {
-      //         message.success('Job completed successfully!');
-              
-      //         // 显示结果
-      //         Modal.success({
-      //           title: 'Hair Analysis Results',
-      //           content: (
-      //             <div>
-      //               <p>Your hair analysis has been completed.</p>
-      //               <p>Results: {job.deliverable || 'No specific results provided'}</p>
-      //             </div>
-      //           ),
-      //         });
-              
-      //         return; // 停止检查
-      //       } else if (job.status === 'CANCELLED') {
-      //         message.error('Job was cancelled');
-      //         return; // 停止检查
-      //       }
-            
-      //       // 继续检查状态
-      //       setTimeout(checkJobStatus, 5000); // 每5秒检查一次
-      //     } catch (error) {
-      //       console.error('Error checking job status:', error);
-      //     }
-      //   };
-        
-      //   // 开始检查工作状态
-      //   setTimeout(checkJobStatus, 5000);
       } else {
         message.error('No service offerings available from this agent');
       }
@@ -1018,11 +907,11 @@ const WelcomeContent: React.FC = () => {
                     // 如果已连接，显示账户信息
                     if (metamaskAccount) {
                       Modal.info({
-                        title: '已连接到 MetaMask',
+                        title: 'Connected to MetaMask',
                         content: (
                           <div>
-                            <p>账户地址: {metamaskAccount}</p>
-                            <p>简短地址: {metamaskAccount.slice(0, 6)}...{metamaskAccount.slice(-4)}</p>
+                            <p>Account Address: {metamaskAccount}</p>
+                            <p>Short Address: {metamaskAccount.slice(0, 6)}...{metamaskAccount.slice(-4)}</p>
                           </div>
                         ),
                         onCancel() {
@@ -1031,28 +920,28 @@ const WelcomeContent: React.FC = () => {
                         cancelText: 'Cancel',
                         okCancel: true,
                         onOk() {
-                          // 断开连接
+                          // Disconnect
                           setMetamaskAccount('');
-                          message.success('已断开 MetaMask 连接');
+                          message.success('Disconnected from MetaMask');
                         },
-                        okText: '断开连接'
+                        okText: 'Disconnect'
                       });
                       return;
                     }
                     
-                    // 检查是否有MetaMask
+                    // Check if MetaMask is available
                     if (typeof window.ethereum !== 'undefined') {
-                      // 请求连接MetaMask
+                      // Request connection to MetaMask
                       window.ethereum.request({ method: 'eth_requestAccounts' })
                         .then((accounts: string[]) => {
-                          message.success(`已连接到MetaMask: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
+                          message.success(`Connected to MetaMask: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
                           setMetamaskAccount(accounts[0]);
                         })
                         .catch((err: Error) => {
-                          message.error(`连接MetaMask失败: ${err.message}`);
+                          message.error(`Failed to connect to MetaMask: ${err.message}`);
                         });
                     } else {
-                      message.error('未检测到MetaMask，请安装MetaMask插件');
+                      message.error('MetaMask not detected, please install MetaMask extension');
                       window.open('https://metamask.io/download/', '_blank');
                     }
                   }}
