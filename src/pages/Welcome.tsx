@@ -30,7 +30,13 @@ import {
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 import {
-  PhantomWalletAdapter
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+  TorusWalletAdapter,
+  LedgerWalletAdapter,
+  CloverWalletAdapter,
+  SolongWalletAdapter,
+  CoinbaseWalletAdapter
 } from '@solana/wallet-adapter-wallets';
 
 // 尝试导入ACP SDK
@@ -45,14 +51,35 @@ import AcpClient, {
 declare global {
   interface Window {
     solana?: any;
+    ethereum?: any;
   }
 }
 
-const WHITELISTED_WALLET_PRIVATE_KEY = '0x28A19087e055086521dBb7cBEA5CBD9F2c43c8Dc';
+const WHITELISTED_WALLET_PRIVATE_KEY = '';
 const WHITELISTED_WALLET_ENTITY_ID = 1;
-const BUYER_AGENT_WALLET_ADDRESS = '0x4d45823fD6880B0b92ab3898BE7b857Be6E4139d';
+const BUYER_AGENT_WALLET_ADDRESS = '0x3A96BD6f0F082039d82105A7f4239264B1D632Ab';
 
-const wallets = [new PhantomWalletAdapter()];
+// 生成有效的以太坊私钥
+const generateValidPrivateKey = (): string => {
+  // 这里使用随机生成的64个十六进制字符作为私钥
+  // 注意：在实际生产环境中，应该使用更安全的方式生成和存储私钥
+  const characters = '0123456789abcdef';
+  let result = '0x';
+  for (let i = 0; i < 64; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+};
+
+const wallets = [
+  new PhantomWalletAdapter(),
+  new SolflareWalletAdapter(),
+  new TorusWalletAdapter(),
+  new LedgerWalletAdapter(),
+  new CloverWalletAdapter(),
+  new SolongWalletAdapter(),
+  new CoinbaseWalletAdapter()
+];
 const endpoint = 'https://api.devnet.solana.com';
 
 const { Panel } = Collapse;
@@ -79,6 +106,7 @@ const WelcomeContent: React.FC = () => {
   const [acpAgents, setAcpAgents] = useState<any[]>([]);
   const [acpLoading, setAcpLoading] = useState(false);
   const [acpClient, setAcpClient] = useState<any>(null);
+  const [metamaskAccount, setMetamaskAccount] = useState<string>('');
   const intl = useIntl();
   const alt1 = [
     "",
@@ -126,6 +154,37 @@ const WelcomeContent: React.FC = () => {
       console.log(r);
     });
     showModal()
+  }, []);
+
+  // 检查 MetaMask 连接状态
+  useEffect(() => {
+    const checkMetaMaskConnection = async () => {
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          // 获取已连接的账户
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts && accounts.length > 0) {
+            setMetamaskAccount(accounts[0]);
+            console.log('MetaMask 已连接:', accounts[0]);
+          }
+
+          // 监听账户变化
+          window.ethereum.on('accountsChanged', (newAccounts: string[]) => {
+            if (newAccounts.length > 0) {
+              setMetamaskAccount(newAccounts[0]);
+              message.info(`MetaMask 账户已切换: ${newAccounts[0].slice(0, 6)}...${newAccounts[0].slice(-4)}`);
+            } else {
+              setMetamaskAccount('');
+              message.info('MetaMask 已断开连接');
+            }
+          });
+        } catch (error) {
+          console.error('检查 MetaMask 连接状态时出错:', error);
+        }
+      }
+    };
+
+    checkMetaMaskConnection();
   }, []);
 
   // 添加一个简单的钱包监听器
@@ -511,19 +570,35 @@ const WelcomeContent: React.FC = () => {
       return;
     }
     
-    if (!publicKey) {
+    if (!metamaskAccount) {
       message.error('Please connect your wallet first');
       return;
     }
+    console.log(metamaskAccount);
     
     setAcpLoading(true);
     setAcpModalVisible(true);
+
+    // var acpContractClient = {
+    //   chain: baseSepoliaAcpConfig.chain,
+    //   contractAddress: "0x2422c1c43451Eb69Ff49dfD39c4Dc8C5230fA1e6",
+    //   virtualsTokenAddress: "0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
+    //   alchemyRpcUrl: "http://localhost:3001/api/proxy/rpc",
+    //   acpUrl: "https://acpx-staging.virtuals.io"
+    // };
+
+    baseSepoliaAcpConfig.alchemyRpcUrl = "http://localhost:8000/alchemy-proxy/api/proxy/rpc";
     
     try {
+      // 生成有效的私钥
+      const validPrivateKey = generateValidPrivateKey();
+      console.log("使用生成的有效私钥");
 
       // 初始化ACP客户端
       const client = new AcpClient({
         acpContractClient: await AcpContractClient.build(
+            // 使用生成的有效私钥
+            // validPrivateKey as `0x${string}`,
             WHITELISTED_WALLET_PRIVATE_KEY,
             WHITELISTED_WALLET_ENTITY_ID,
             BUYER_AGENT_WALLET_ADDRESS,
@@ -540,23 +615,25 @@ const WelcomeContent: React.FC = () => {
               console.log(`Job ${job.id} paid`);
           } else if (job.phase === AcpJobPhases.COMPLETED) {
               console.log(`Job ${job.id} completed`);
+              message.success('Job completed');
           }
         },
-        onEvaluate: (job: any) => {
-          message.info(`ACP job evaluation: ${job.id}`);
-          console.log('ACP job evaluation:', job);
+        onEvaluate: async (job: AcpJob) => {
+          console.log("Evaluation function called", job);
+          await job.evaluate(true, "Self-evaluated and approved");
+          console.log(`Job ${job.id} evaluated`);
           
           // 自动评估逻辑
-          setTimeout(async () => {
-            try {
-              // 假设评估通过
-              await job.evaluate(true, "Service completed successfully");
-              message.success(`Job ${job.id} evaluated successfully`);
-            } catch (evalError) {
-              console.error('Evaluation error:', evalError);
-              message.error(`Failed to evaluate job: ${evalError instanceof Error ? evalError.message : 'Unknown error'}`);
-            }
-          }, 3000); // 3秒后自动评估
+          // setTimeout(async () => {
+          //   try {
+          //     // 假设评估通过
+          //     await job.evaluate(true, "Service completed successfully");
+          //     message.success(`Job ${job.id} evaluated successfully`);
+          //   } catch (evalError) {
+          //     console.error('Evaluation error:', evalError);
+          //     message.error(`Failed to evaluate job: ${evalError instanceof Error ? evalError.message : 'Unknown error'}`);
+          //   }
+          // }, 3000); // 3秒后自动评估
         }
       });
       
@@ -564,7 +641,19 @@ const WelcomeContent: React.FC = () => {
       setAcpClient(client);
       
       // 浏览代理
-      const agents = await client.browseAgents('Lushair Analysis', 'beauty');
+      console.log('Browsing ACP agents...');
+      const agents = await client.browseAgents('Lushair Analysis', 'wellness');
+      // console.log('ACP Agents data:', JSON.stringify(agents, null, 2)); // 添加日志输出代理数据
+      
+      // 检查代理数据结构
+      if (agents && agents.length > 0) {
+        console.log('First agent structure:');
+        const firstAgent = agents[0] as Record<string, any>;
+        for (const key in firstAgent) {
+          console.log(`${key}:`, firstAgent[key]);
+        }
+      }
+      
       setAcpAgents(agents || []);
       
       if (agents && agents.length > 0) {
@@ -590,80 +679,172 @@ const WelcomeContent: React.FC = () => {
     try {
       message.loading('Initiating job with agent...', 1);
       
+      // 输出代理详情以便调试 - 修改这里，只记录必要的属性
+      console.log('Initiating job with agent:', {
+        name: agent.name,
+        address: agent.ownerAddress || agent.walletAddress || agent.address,
+        // 其他需要的属性
+      });
+      
       // 选择代理的第一个服务
-      if (agent.offerings && agent.offerings.length > 0) {
+      if (agent.offerings && Array.isArray(agent.offerings) && agent.offerings.length > 0) {
         const chosenJobOffering = agent.offerings[0];
-        
-        // 服务要求
-        const serviceRequirement = {
-          type: 'hair_care_analysis',
-          description: 'Analyze hair condition and provide recommendations',
-          userId: userId,
-          data: {
-            userImages: uploadImgOk,
-            userAge: userId, // 这里应该是用户年龄，暂用userId代替
-            additionalInfo: 'User requesting hair analysis through Lushair platform'
-          }
-        };
-        
-        // 使用当前用户作为评估者
-        const evaluatorAddress = publicKey?.toString() || '';
-        
-        // 设置工作到期时间（例如，24小时后）
-        const expiredAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
-        
-        message.info('Submitting job to ACP network...');
-        
-        // 初始化工作
+        console.log('Chosen job offering type:', chosenJobOffering.type);
+
         const jobId = await chosenJobOffering.initiateJob(
-          serviceRequirement,
-          evaluatorAddress,
-          expiredAt
+          // <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
+          // Reference: (./images/specify-requirement-toggle-switch.png)
+          {'Scalp Data': "Help me to analyze the scalp data."},
+          BUYER_AGENT_WALLET_ADDRESS, // Use default evaluator address
+          new Date(Date.now() + 1000 * 60 * 60 * 24) // expiredAt as last parameter
         );
+    
+        console.log(`Job ${jobId} initiated`);
+        message.success('Job initiated');
+        setAcpModalVisible(false)
         
-        message.success(`Job initiated successfully with ID: ${jobId}`);
+      //   // 服务要求
+      //   const serviceRequirement = {
+      //     type: 'hair_care_analysis',
+      //     description: 'Analyze hair condition and provide recommendations',
+      //     userId: userId,
+      //     data: {
+      //       userImages: uploadImgOk,
+      //       userAge: userId, // 这里应该是用户年龄，暂用userId代替
+      //       additionalInfo: 'User requesting hair analysis through Lushair platform'
+      //     }
+      //   };
         
-        // 监听工作状态
-        const checkJobStatus = async () => {
-          try {
-            const job = await acpClient.getJobById(jobId);
-            console.log('Current job status:', job.status);
+      //   // 使用当前用户作为评估者
+      //   const evaluatorAddress = publicKey?.toString() || '';
+        
+      //   // 设置工作到期时间（例如，24小时后）
+      //   const expiredAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+        
+      //   message.info('Submitting job to ACP network...');
+        
+      //   // 初始化工作
+      //   const jobId = await chosenJobOffering.initiateJob(
+      //     serviceRequirement,
+      //     evaluatorAddress,
+      //     expiredAt
+      //   );
+        
+      //   message.success(`Job initiated successfully with ID: ${jobId}`);
+        
+      //   // 监听工作状态
+      //   const checkJobStatus = async () => {
+      //     try {
+      //       const job = await acpClient.getJobById(jobId);
+      //       console.log('Current job status:', job.status);
             
-            if (job.status === 'COMPLETED') {
-              message.success('Job completed successfully!');
+      //       if (job.status === 'COMPLETED') {
+      //         message.success('Job completed successfully!');
               
-              // 显示结果
-              Modal.success({
-                title: 'Hair Analysis Results',
-                content: (
-                  <div>
-                    <p>Your hair analysis has been completed.</p>
-                    <p>Results: {job.deliverable || 'No specific results provided'}</p>
-                  </div>
-                ),
-              });
+      //         // 显示结果
+      //         Modal.success({
+      //           title: 'Hair Analysis Results',
+      //           content: (
+      //             <div>
+      //               <p>Your hair analysis has been completed.</p>
+      //               <p>Results: {job.deliverable || 'No specific results provided'}</p>
+      //             </div>
+      //           ),
+      //         });
               
-              return; // 停止检查
-            } else if (job.status === 'CANCELLED') {
-              message.error('Job was cancelled');
-              return; // 停止检查
-            }
+      //         return; // 停止检查
+      //       } else if (job.status === 'CANCELLED') {
+      //         message.error('Job was cancelled');
+      //         return; // 停止检查
+      //       }
             
-            // 继续检查状态
-            setTimeout(checkJobStatus, 5000); // 每5秒检查一次
-          } catch (error) {
-            console.error('Error checking job status:', error);
-          }
-        };
+      //       // 继续检查状态
+      //       setTimeout(checkJobStatus, 5000); // 每5秒检查一次
+      //     } catch (error) {
+      //       console.error('Error checking job status:', error);
+      //     }
+      //   };
         
-        // 开始检查工作状态
-        setTimeout(checkJobStatus, 5000);
+      //   // 开始检查工作状态
+      //   setTimeout(checkJobStatus, 5000);
       } else {
         message.error('No service offerings available from this agent');
       }
     } catch (error: unknown) {
       console.error('Job initiation error:', error);
       message.error(`Failed to initiate job: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // ACP Integration function
+  const initializeSellerAcp = async () => {
+    if (!AcpClient) {
+      message.error('ACP SDK not loaded. Please make sure @virtuals-protocol/acp-node is installed.');
+      return;
+    }
+    
+    if (!metamaskAccount) {
+      message.error('Please connect your wallet first');
+      return;
+    }
+    console.log(metamaskAccount);
+
+    // var acpContractClient = {
+    //   chain: baseSepoliaAcpConfig.chain,
+    //   contractAddress: "0x2422c1c43451Eb69Ff49dfD39c4Dc8C5230fA1e6",
+    //   virtualsTokenAddress: "0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
+    //   alchemyRpcUrl: "http://localhost:3001/api/proxy/rpc",
+    //   acpUrl: "https://acpx-staging.virtuals.io"
+    // };
+
+    baseSepoliaAcpConfig.alchemyRpcUrl = "http://localhost:8000/alchemy-proxy/api/proxy/rpc";
+    
+    try {
+      // 生成有效的私钥
+      const validPrivateKey = generateValidPrivateKey();
+      console.log("使用生成的有效私钥");
+
+      // 初始化ACP客户端
+      const client = new AcpClient({
+        acpContractClient: await AcpContractClient.build(
+            // 使用生成的有效私钥
+            // validPrivateKey as `0x${string}`,
+            WHITELISTED_WALLET_PRIVATE_KEY,
+            WHITELISTED_WALLET_ENTITY_ID,
+            '0x4d45823fD6880B0b92ab3898BE7b857Be6E4139d',
+            baseSepoliaAcpConfig
+        ),
+        onNewTask: async (job: AcpJob) => {
+          console.log("Responding to job", job);
+          if (
+              job.phase === AcpJobPhases.REQUEST &&
+              job.memos.find((m) => m.nextPhase === AcpJobPhases.NEGOTIATION)
+          ) {
+              console.log("Responding to job", job);
+              await job.respond(true);
+              console.log(`Job ${job.id} responded`);
+          } else if (
+              job.phase === AcpJobPhases.TRANSACTION &&
+              job.memos.find((m) => m.nextPhase === AcpJobPhases.EVALUATION)
+          ) {
+              console.log("Delivering job", job);
+              await job.deliver(
+                  JSON.stringify({
+                      type: "url",
+                      value: "https://www.lushair.ai",
+                  })
+              );
+              console.log(`Job ${job.id} delivered`);
+          }
+        },
+      });
+      
+      await client.init();
+    } catch (error: unknown) {
+      console.error('ACP integration error:', error);
+      message.error(`ACP integration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      // setAcpLoading(false);
     }
   };
 
@@ -808,6 +989,76 @@ const WelcomeContent: React.FC = () => {
                   icon={acpClient ? <span style={{ color: '#fff', fontSize: '18px' }}>✓</span> : null}
                 >
                   {acpClient ? 'ACP Connected' : 'ACP'}
+                </Button>
+                <Button 
+                  type="primary" 
+                  onClick={async () => {
+                    initializeSellerAcp();
+                  }}
+                  style={{ 
+                    background: '#ff4d4f',
+                    borderColor: '#ff4d4f',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  Seller Mode
+                </Button>
+                <Button
+                  style={{
+                    background: metamaskAccount ? '#52c41a' : '#f6851b',
+                    borderColor: metamaskAccount ? '#52c41a' : '#f6851b',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                  onClick={() => {
+                    // 如果已连接，显示账户信息
+                    if (metamaskAccount) {
+                      Modal.info({
+                        title: '已连接到 MetaMask',
+                        content: (
+                          <div>
+                            <p>账户地址: {metamaskAccount}</p>
+                            <p>简短地址: {metamaskAccount.slice(0, 6)}...{metamaskAccount.slice(-4)}</p>
+                          </div>
+                        ),
+                        onCancel() {
+                          console.log("onCancel");
+                        },
+                        cancelText: 'Cancel',
+                        okCancel: true,
+                        onOk() {
+                          // 断开连接
+                          setMetamaskAccount('');
+                          message.success('已断开 MetaMask 连接');
+                        },
+                        okText: '断开连接'
+                      });
+                      return;
+                    }
+                    
+                    // 检查是否有MetaMask
+                    if (typeof window.ethereum !== 'undefined') {
+                      // 请求连接MetaMask
+                      window.ethereum.request({ method: 'eth_requestAccounts' })
+                        .then((accounts: string[]) => {
+                          message.success(`已连接到MetaMask: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
+                          setMetamaskAccount(accounts[0]);
+                        })
+                        .catch((err: Error) => {
+                          message.error(`连接MetaMask失败: ${err.message}`);
+                        });
+                    } else {
+                      message.error('未检测到MetaMask，请安装MetaMask插件');
+                      window.open('https://metamask.io/download/', '_blank');
+                    }
+                  }}
+                  icon={<img src="/metamask-icon.svg" alt="MetaMask" style={{ width: '16px', height: '16px' }} />}
+                >
+                  {metamaskAccount ? `${metamaskAccount.slice(0, 4)}...${metamaskAccount.slice(-4)}` : 'MetaMask'}
                 </Button>
               </div>}
             >
@@ -1040,25 +1291,40 @@ const WelcomeContent: React.FC = () => {
             <h3>Available ACP Agents for Hair Care</h3>
             {acpAgents.length > 0 ? (
               <Table
-                dataSource={acpAgents.map((agent, index) => ({
-                  key: index,
-                  name: agent.name || `Agent ${index + 1}`,
-                  address: agent.address || 'Unknown',
-                  services: (agent.offerings || []).map((o: any) => o.name || 'Unknown service').join(', ')
-                }))}
+                dataSource={acpAgents.map((agent, index) => {
+                  console.log('Processing agent:', agent); // 添加日志输出单个代理数据
+                  // 检查对象的所有属性
+                  const agentKeys = Object.keys(agent || {});
+                  console.log('Agent properties:', agentKeys);
+                  
+                  return {
+                    key: index,
+                    name: agent.name || `Agent ${index + 1}`,
+                    // 尝试不同的属性名称
+                    address: agent.ownerAddress || agent.walletAddress || agent.address || 'Unknown',
+                    // 检查 offerings 的结构
+                    services: (() => {
+                      console.log('Agent offerings:', agent.offerings);
+                      if (agent.offerings && Array.isArray(agent.offerings) && agent.offerings.length > 0) {
+                        return agent.offerings[0].type || 'Unknown service';
+                      }
+                      return 'No services';
+                    })()
+                  };
+                })}
                 columns={[
                   {
                     title: 'Name',
                     dataIndex: 'name',
                     key: 'name',
                   },
+                  // {
+                  //   title: 'Address',
+                  //   dataIndex: 'address',
+                  //   key: 'address',
+                  // },
                   {
-                    title: 'Address',
-                    dataIndex: 'address',
-                    key: 'address',
-                  },
-                  {
-                    title: 'Services',
+                    title: 'Service',
                     dataIndex: 'services',
                     key: 'services',
                   },
@@ -1071,9 +1337,16 @@ const WelcomeContent: React.FC = () => {
                         size="small"
                         onClick={() => {
                           const agentIndex = acpAgents.findIndex(agent => 
-                            agent.name === record.name && agent.address === record.address
+                            agent.name === record.name && 
+                            (agent.ownerAddress === record.address || 
+                             agent.walletAddress === record.address || 
+                             agent.address === record.address)
                           );
+                          console.log('Looking for agent with name:', record.name, 'and address:', record.address);
+                          console.log('Agent index found:', agentIndex);
+                          
                           if (agentIndex !== -1) {
+                            console.log('Found agent to initiate job with:', acpAgents[agentIndex]);
                             initiateJobWithAgent(acpAgents[agentIndex]);
                           } else {
                             message.error('Agent not found');

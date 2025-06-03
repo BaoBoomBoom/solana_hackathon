@@ -18,6 +18,16 @@ export default {
       // 依赖 origin 的功能可能需要这个，比如 cookie
       changeOrigin: true,
     },
+    '/alchemy-proxy/': {
+      target: 'https://alchemy-proxy.virtuals.io',
+      changeOrigin: true,
+      pathRewrite: { '^/alchemy-proxy': '' },
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,alchemy-aa-sdk-signer'
+      }
+    }
   },
   test: {
     '/api/': {
