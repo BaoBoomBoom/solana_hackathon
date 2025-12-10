@@ -46,7 +46,7 @@ export default defineConfig({
   },
   // esbuild is father build tools
   // https://umijs.org/plugins/plugin-esbuild
-  esbuild: {},
+  esbuild: false,
   title: false,
   ignoreMomentLocale: true,
   proxy: proxy[REACT_APP_ENV || 'dev'],
@@ -70,6 +70,7 @@ export default defineConfig({
     },
   ],
   nodeModulesTransform: { type: 'none' },
+  // mfsu: false,
   mfsu: {},
   webpack5: {},
   exportStatic: {},

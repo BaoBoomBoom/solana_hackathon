@@ -325,7 +325,12 @@ declare namespace API {
     productDO: ProductDO[]; // Assuming the API returns an array of products
   }
 
-
+  type SelfieParams = {
+    gender?: number;
+    imageUrl?: string;
+    customer?: string;
+    sign?: string;
+  };
 
 
 }

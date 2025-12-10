@@ -11,7 +11,7 @@ const Settings: LayoutSettings & {
   "fixedHeader": true,
   "fixSiderbar": true,
   "pwa": false,
-  "logo": "https://lushair-1309996521.cos.ap-shanghai.myqcloud.com/icons/icon.png",
+  "logo": "https://meta.lushair.cn/icons/icon.png",
   "headerHeight": 48,
   "splitMenus": false,
   "title" : "lushair",

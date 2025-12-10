@@ -72,11 +72,34 @@ export async function currentUser(options?: { [key: string]: any }) {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`
   };
-  return request<API.CurrentUser>('/api/user/currentUser', {
+  // return request<API.CurrentUser>('/api/user/currentUser', {
+  //   method: 'POST',
+  //   ...(options || {}),
+  //   headers: { ...options?.headers, ...headers }
+  // });
+
+  const response = await request('/api/user/currentUser', {
     method: 'POST',
     ...(options || {}),
-    headers: { ...options?.headers, ...headers }
+    headers: { ...options?.headers, ...headers },
+    // Use getResponse to get the raw response
+    getResponse: true,
   });
+  
+  // Check if the response data might be duplicated JSON
+  if (typeof response.data === 'string') {
+    try {
+      const firstBraceClose = response.data.indexOf('}');
+      if (firstBraceClose > 0) {
+        // Only parse the first JSON object
+        return JSON.parse(response.data.substring(0, firstBraceClose + 1));
+      }
+    } catch (err) {
+      // If parsing fails, continue with original response
+    }
+  }
+  
+  return response.data;
 }
 
 /** 获取当前的用户 GET /api/currentUser skipErrorHandler */
@@ -86,12 +109,34 @@ export async function currentUserSkipErrorHandler(options?: { [key: string]: any
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`
   };
-  return request<API.CurrentUser>('/api/user/currentUser', {
+  const response = await request('/api/user/currentUser', {
     method: 'POST',
     ...(options || {}),
-    skipErrorHandler: true,
-    headers: { ...options?.headers, ...headers }
+    headers: { ...options?.headers, ...headers },
+    // Use getResponse to get the raw response
+    getResponse: true,
   });
+  
+  // Check if the response data might be duplicated JSON
+  if (typeof response.data === 'string') {
+    try {
+      const firstBraceClose = response.data.indexOf('}');
+      if (firstBraceClose > 0) {
+        // Only parse the first JSON object
+        return JSON.parse(response.data.substring(0, firstBraceClose + 1));
+      }
+    } catch (err) {
+      // If parsing fails, continue with original response
+    }
+  }
+  
+  return response.data;
+  // return request<API.CurrentUser>('/api/user/currentUser', {
+  //   method: 'POST',
+  //   ...(options || {}),
+  //   skipErrorHandler: true,
+  //   headers: { ...options?.headers, ...headers }
+  // });
 }
 
 /** 退出登录接口 POST /api/login/outLogin */
@@ -257,6 +302,18 @@ export async function getProduct(body: { userId: string }, options?: { [key: str
 
 export async function getIngredient(body: { userId: string }, options?: { [key: string]: any }) {
   return request<{ success: boolean, data: any, code: number, msg: string }>('/api/analyse/getIngredient', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  });
+}
+
+//selfieApi
+export async function selfieApi(body: API.SelfieParams, options?: { [key: string]: any }) {
+  return request<API.ResponseType<string>>('/api/file/selfieNetApi', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

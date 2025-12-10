@@ -28,6 +28,8 @@ import {
   WalletModalProvider
 } from '@solana/wallet-adapter-react-ui';
 import '@solana/wallet-adapter-react-ui/styles.css';
+import { selfieApi } from '@/services/ant-design-pro/api';
+import MD5 from 'crypto-js/md5';
 
 import {
   PhantomWalletAdapter,
@@ -47,6 +49,11 @@ import AcpClient, {
   baseSepoliaAcpConfig 
 } from '@virtuals-protocol/acp-node';
 
+import AcpPlugin, {
+  AcpToken,
+  baseConfig
+} from "@virtuals-protocol/game-acp-plugin";
+
 // 添加window类型扩展
 declare global {
   interface Window {
@@ -55,10 +62,13 @@ declare global {
   }
 }
 
-const WHITELISTED_WALLET_PRIVATE_KEY = '';
+const WHITELISTED_WALLET_PRIVATE_KEY = '0xcb55928a037e406af3114a4597c824d78d6c26c7ae42c89eed7c6af167f00344';
 const WHITELISTED_WALLET_ENTITY_ID = 1;
 const BUYER_AGENT_WALLET_ADDRESS = '0x3A96BD6f0F082039d82105A7f4239264B1D632Ab';
-
+const selfie = {
+  "stage": 1,
+  "position": ''
+}
 // 生成有效的以太坊私钥
 const generateValidPrivateKey = (): string => {
   // 这里使用随机生成的64个十六进制字符作为私钥
@@ -453,22 +463,8 @@ const WelcomeContent: React.FC = () => {
         onSuccess();
         message.success('头像上传成功！');
       }
-    //     console.log("hey")
-    // const web3Modal = new Web3Modal();
-    // const connection = await web3Modal.connect();
-    // const provider = new ethers.providers.Web3Provider(connection);
-    // const signer = await provider.getSigner();
-    // const contract = new ethers.Contract(
-    //   '0x6A6237a730106aBc953A7d5cC5Ff50394eFa8d5a',
-    //   preferenceAbi,
-    //   signer
-    // );
-    // const txnn = await contract.recordPurchase(
-    // );
-    // await txnn.wait();
-    // console.log(txnn);
     } catch (error) {
-      onError(error);
+      onError?.(error as Error);
       message.error('头像上传失败！');
     }
   };
@@ -534,15 +530,8 @@ const WelcomeContent: React.FC = () => {
     setAcpLoading(true);
     setAcpModalVisible(true);
 
-    // var acpContractClient = {
-    //   chain: baseSepoliaAcpConfig.chain,
-    //   contractAddress: "0x2422c1c43451Eb69Ff49dfD39c4Dc8C5230fA1e6",
-    //   virtualsTokenAddress: "0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
-    //   alchemyRpcUrl: "http://localhost:3001/api/proxy/rpc",
-    //   acpUrl: "https://acpx-staging.virtuals.io"
-    // };
-
-    baseSepoliaAcpConfig.alchemyRpcUrl = "http://localhost:8000/alchemy-proxy/api/proxy/rpc";
+    // baseSepoliaAcpConfig.alchemyRpcUrl = "http://localhost:8000/alchemy-proxy/api/proxy/rpc";
+    // baseSepoliaAcpConfig.acpUrl = "http://localhost:8000/acpx-staging";
     
     try {
       // 生成有效的私钥
@@ -648,7 +637,7 @@ const WelcomeContent: React.FC = () => {
         const jobId = await chosenJobOffering.initiateJob(
           // <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
           // Reference: (./images/specify-requirement-toggle-switch.png)
-          {'Scalp Data': "Help me to analyze the scalp data."},
+          {'gender': 1, 'imageUrl': 'https://meta.lushair.cn/icons/man.png', 'email': '1@qq.com'},
           BUYER_AGENT_WALLET_ADDRESS, // Use default evaluator address
           new Date(Date.now() + 1000 * 60 * 60 * 24) // expiredAt as last parameter
         );
@@ -686,7 +675,8 @@ const WelcomeContent: React.FC = () => {
     //   acpUrl: "https://acpx-staging.virtuals.io"
     // };
 
-    baseSepoliaAcpConfig.alchemyRpcUrl = "http://localhost:8000/alchemy-proxy/api/proxy/rpc";
+    // baseSepoliaAcpConfig.alchemyRpcUrl = "http://localhost:8000/alchemy-proxy/api/proxy/rpc";
+    // baseSepoliaAcpConfig.acpUrl = "http://localhost:8000/acpx-staging";
     
     try {
       // 生成有效的私钥
@@ -710,7 +700,8 @@ const WelcomeContent: React.FC = () => {
               job.memos.find((m) => m.nextPhase === AcpJobPhases.NEGOTIATION)
           ) {
               console.log("Responding to job", job);
-              await job.respond(true);
+              // await job.respond(true);
+              await handleSellerAcp(job);
               console.log(`Job ${job.id} responded`);
           } else if (
               job.phase === AcpJobPhases.TRANSACTION &&
@@ -719,8 +710,8 @@ const WelcomeContent: React.FC = () => {
               console.log("Delivering job", job);
               await job.deliver(
                   JSON.stringify({
-                      type: "url",
-                      value: "https://www.lushair.ai",
+                      type: "String",
+                      value: JSON.stringify(selfie),
                   })
               );
               console.log(`Job ${job.id} delivered`);
@@ -729,11 +720,75 @@ const WelcomeContent: React.FC = () => {
       });
       
       await client.init();
+
+      // try {
+      //   const job = await client.getJobById(4921);
+      //   await handleSellerAcp(job as any);
+      // } catch (error) {
+      //   console.error('Error checking job status:', error);
+      // }
     } catch (error: unknown) {
       console.error('ACP integration error:', error);
       message.error(`ACP integration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       // setAcpLoading(false);
+    }
+  };
+
+  const handleSellerAcp = async (job: AcpJob) => {
+    try {
+      let memo = job.memos[0];
+      if (memo) {
+        let content = JSON.parse(memo.content);
+        let gender = content.gender;
+        let Gender = content.Gender;
+        if (gender === 'Male' || Gender === 'Male') {
+          gender = 1;
+        } else if (gender === 'Female' || Gender === 'Female') {
+          gender = 2;
+        }
+        let imageUrl = content.imageUrl;
+        let customer = "lusHairTest";
+        let key = "03Ke5Aa60Esm";
+        // 按gender + imageUrl + key + customer的顺序进行MD5加密
+        const sign = MD5(gender + imageUrl + key + customer).toString();
+        const response = await selfieApi({gender, imageUrl, customer, sign});
+        console.log('API Response:', response);
+        if (response.success) {
+          let result = response.data as any;
+          // let result = JSON.parse(data);
+          selfie.stage = result.STAGE;
+          let position = result.POSITION;
+          if (position) {
+            if (position === '无') {
+              selfie.position = '';
+            } else if (position === '前额') {
+              selfie.position = 'Forehead';
+            } else if (position === '头顶') {
+              selfie.position = 'Top-head';
+            } else if (position === '斑秃') {
+              selfie.position = 'Alopecia areata';
+            } 
+          }
+          console.log('Updated selfie object:', selfie);
+          job.respond(true);
+          message.success('Successfully processed the image');
+        } else {
+          console.error('API Error:', response.msg);
+          message.error(response.msg || 'Failed to process the image');
+          job.respond(false, response.msg || 'Failed to process the image');
+        }
+      } else {
+        const errorMsg = 'No memo found in the job';
+        console.error(errorMsg);
+        message.error(errorMsg);
+        job.respond(false, errorMsg);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'An unknown error occurred';
+      console.error('Job processing error:', errorMsg);
+      message.error(errorMsg);
+      job.respond(false, errorMsg);
     }
   };
 
@@ -861,95 +916,97 @@ const WelcomeContent: React.FC = () => {
                 marginBottom: '20px'
               }}
               className={styles.quanD}
-              extra={<div style={{ marginTop: '20px', textAlign: 'center', display: 'flex', gap: '10px' }}>
-                <WalletMultiButton />
-                <Button 
-                  type="primary" 
-                  onClick={async () => {
-                    initializeAcp();
-                  }}
-                  style={{ 
-                    background: acpClient ? '#52c41a' : '#1890ff',
-                    borderColor: acpClient ? '#52c41a' : '#1890ff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}
-                  icon={acpClient ? <span style={{ color: '#fff', fontSize: '18px' }}>✓</span> : null}
-                >
-                  {acpClient ? 'ACP Connected' : 'ACP'}
-                </Button>
-                <Button 
-                  type="primary" 
-                  onClick={async () => {
-                    initializeSellerAcp();
-                  }}
-                  style={{ 
-                    background: '#ff4d4f',
-                    borderColor: '#ff4d4f',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}
-                >
-                  Seller Mode
-                </Button>
-                <Button
-                  style={{
-                    background: metamaskAccount ? '#52c41a' : '#f6851b',
-                    borderColor: metamaskAccount ? '#52c41a' : '#f6851b',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}
-                  onClick={() => {
-                    // 如果已连接，显示账户信息
-                    if (metamaskAccount) {
-                      Modal.info({
-                        title: 'Connected to MetaMask',
-                        content: (
-                          <div>
-                            <p>Account Address: {metamaskAccount}</p>
-                            <p>Short Address: {metamaskAccount.slice(0, 6)}...{metamaskAccount.slice(-4)}</p>
-                          </div>
-                        ),
-                        onCancel() {
-                          console.log("onCancel");
-                        },
-                        cancelText: 'Cancel',
-                        okCancel: true,
-                        onOk() {
-                          // Disconnect
-                          setMetamaskAccount('');
-                          message.success('Disconnected from MetaMask');
-                        },
-                        okText: 'Disconnect'
-                      });
-                      return;
-                    }
-                    
-                    // Check if MetaMask is available
-                    if (typeof window.ethereum !== 'undefined') {
-                      // Request connection to MetaMask
-                      window.ethereum.request({ method: 'eth_requestAccounts' })
-                        .then((accounts: string[]) => {
-                          message.success(`Connected to MetaMask: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
-                          setMetamaskAccount(accounts[0]);
-                        })
-                        .catch((err: Error) => {
-                          message.error(`Failed to connect to MetaMask: ${err.message}`);
+              extra={userId === 'lusHairfa279f04' ? (
+                <div style={{ marginTop: '20px', textAlign: 'center', display: 'flex', gap: '10px' }}>
+                  <WalletMultiButton />
+                  <Button 
+                    type="primary" 
+                    onClick={async () => {
+                      initializeAcp();
+                    }}
+                    style={{ 
+                      background: acpClient ? '#52c41a' : '#1890ff',
+                      borderColor: acpClient ? '#52c41a' : '#1890ff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    icon={acpClient ? <span style={{ color: '#fff', fontSize: '18px' }}>✓</span> : null}
+                  >
+                    {acpClient ? 'ACP Connected' : 'ACP'}
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    onClick={async () => {
+                      initializeSellerAcp();
+                    }}
+                    style={{ 
+                      background: '#ff4d4f',
+                      borderColor: '#ff4d4f',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    Seller Mode
+                  </Button>
+                  <Button
+                    style={{
+                      background: metamaskAccount ? '#52c41a' : '#f6851b',
+                      borderColor: metamaskAccount ? '#52c41a' : '#f6851b',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    onClick={() => {
+                      // 如果已连接，显示账户信息
+                      if (metamaskAccount) {
+                        Modal.info({
+                          title: 'Connected to MetaMask',
+                          content: (
+                            <div>
+                              <p>Account Address: {metamaskAccount}</p>
+                              <p>Short Address: {metamaskAccount.slice(0, 6)}...{metamaskAccount.slice(-4)}</p>
+                            </div>
+                          ),
+                          onCancel() {
+                            console.log("onCancel");
+                          },
+                          cancelText: 'Cancel',
+                          okCancel: true,
+                          onOk() {
+                            // Disconnect
+                            setMetamaskAccount('');
+                            message.success('Disconnected from MetaMask');
+                          },
+                          okText: 'Disconnect'
                         });
-                    } else {
-                      message.error('MetaMask not detected, please install MetaMask extension');
-                      window.open('https://metamask.io/download/', '_blank');
-                    }
-                  }}
-                  icon={<img src="/metamask-icon.svg" alt="MetaMask" style={{ width: '16px', height: '16px' }} />}
-                >
-                  {metamaskAccount ? `${metamaskAccount.slice(0, 4)}...${metamaskAccount.slice(-4)}` : 'MetaMask'}
-                </Button>
-              </div>}
+                        return;
+                      }
+                      
+                      // Check if MetaMask is available
+                      if (typeof window.ethereum !== 'undefined') {
+                        // Request connection to MetaMask
+                        window.ethereum.request({ method: 'eth_requestAccounts' })
+                          .then((accounts: string[]) => {
+                            message.success(`Connected to MetaMask: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
+                            setMetamaskAccount(accounts[0]);
+                          })
+                          .catch((err: Error) => {
+                            message.error(`Failed to connect to MetaMask: ${err.message}`);
+                          });
+                      } else {
+                        message.error('MetaMask not detected, please install MetaMask extension');
+                        window.open('https://metamask.io/download/', '_blank');
+                      }
+                    }}
+                    icon={<img src="/metamask-icon.svg" alt="MetaMask" style={{ width: '16px', height: '16px' }} />}
+                  >
+                    {metamaskAccount ? `${metamaskAccount.slice(0, 4)}...${metamaskAccount.slice(-4)}` : 'MetaMask'}
+                  </Button>
+                </div>
+              ) : null}
             >
               {/* 钱包状态显示 */}
               {/* <div style={{ margin: '20px 0', padding: '10px', background: 'rgba(0,0,0,0.5)', borderRadius: '8px', color: 'white' }}>
@@ -992,12 +1049,26 @@ const WelcomeContent: React.FC = () => {
                     message.error(errorMessage);
                     return;
                   }
-                  try {
-                    // 尝试执行交易
-                    await txn("");
-                  } catch (error) {
-                    console.error("处理失败:", error);
+                  // 继续后续处理
+                  const msg = await analyseGo({userId});
+                  if (msg.success) {
+                    const defaultLoginSuccessMessage = "发送成功";
+                    message.success(defaultLoginSuccessMessage);
+                    history.push({
+                      pathname: "/res",
+                      state: {
+                        data: msg.data,
+                      },
+                    });
+                  } else {
+                    message.error(msg.msg);
                   }
+                  // try {
+                  //   // 尝试执行交易
+                  //   await txn("");
+                  // } catch (error) {
+                  //   console.error("处理失败:", error);
+                  // }
                 }}
               >
                 <p><FormattedMessage id="t4" /></p>

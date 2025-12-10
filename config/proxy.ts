@@ -27,6 +27,16 @@ export default {
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'DNT,X-Mx-ReqToken,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,alchemy-aa-sdk-signer'
       }
+    },
+    '/acpx-staging/': {
+      target: 'https://acpx-staging.virtuals.io',
+      changeOrigin: true,
+      pathRewrite: { '^/acpx-staging': '' },
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, wallet-address'
+      }
     }
   },
   test: {
